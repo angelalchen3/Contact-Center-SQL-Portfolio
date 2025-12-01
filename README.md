@@ -43,4 +43,35 @@ The repo includes reusable SQL structures:
 - Parameter tables
 - Exclusion lists
 - Time bucketing
-- Clean dime
+- Clean dimension joins
+
+---
+
+## Technology
+
+All queries are written using **Snowflake SQL** with:
+- CTEs (`WITH` clauses)
+- Window functions
+- Conditional logic
+- Date/time manipulation
+- Semi-structured table joins
+
+Queries follow warehouse-style naming (e.g., `fact_`, `dim_`) to reflect analytics engineering patterns.
+
+---
+
+## Purpose
+
+This repository is meant to:
+- Demonstrate SQL proficiency for data engineering and analytics roles  
+- Provide examples of production-level logic without exposing sensitive or proprietary information  
+- Show familiarity with contact center and outbound-dialer data models  
+
+---
+
+## Notes
+
+- All schemas, tables, columns, queue names, and values have been anonymized.
+- No operational rules, thresholds, or internal data structures are included.
+- These examples are strictly for showcasing SQL logic and modeling techniques.
+
