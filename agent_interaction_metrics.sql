@@ -1,4 +1,3 @@
--- agent_interaction_metrics.sql
 -- Purpose:
 --   1) Daily agent-level interaction metrics with time-in-state breakdown
 --   2) Monthly call volume by queue
