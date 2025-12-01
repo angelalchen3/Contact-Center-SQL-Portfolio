@@ -1,0 +1,3 @@
+-- Notes:
+--   - All table and column names are anonymized for portfolio use
+--   - Written for a Snowflake-style SQL environment
