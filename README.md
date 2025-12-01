@@ -1,5 +1,16 @@
 # SQL Portfolio – Contact Center & Dialer Analytics
 
+## Purpose
+
+This repository is meant to:
+- Demonstrate SQL proficiency for data engineering and analytics roles  
+- Provide examples of production-level logic without exposing sensitive or proprietary information  
+- Show familiarity with contact center and outbound-dialer data models  
+
+---
+
+## Background
+
 This repository contains anonymized SQL examples based on real analytics and data engineering work.  
 The queries demonstrate skills in data modeling, time-series analysis, compliance logic, IVR analytics, 
 dialer performance measurement, and Snowflake SQL optimization.
@@ -57,15 +68,6 @@ All queries are written using **Snowflake SQL** with:
 - Semi-structured table joins
 
 Queries follow warehouse-style naming (e.g., `fact_`, `dim_`) to reflect analytics engineering patterns.
-
----
-
-## Purpose
-
-This repository is meant to:
-- Demonstrate SQL proficiency for data engineering and analytics roles  
-- Provide examples of production-level logic without exposing sensitive or proprietary information  
-- Show familiarity with contact center and outbound-dialer data models  
 
 ---
 
