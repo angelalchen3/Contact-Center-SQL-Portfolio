@@ -1,26 +1,30 @@
--- ivr_interaction_summary.sql
+-- ivr_event_summary_30min.sql
 -- Purpose:
---   Summarize IVR interactions by 30-minute interval, including containment
---   and transfer behavior.
+--   Summarize self-service events by 30-minute interval, including
+--   resolution (contained) and escalation (transferred) behavior.
+
+WITH parameters AS (
+  SELECT
+    TO_DATE('2024-01-01') AS start_date
+)
 
 SELECT
-    ivr_timestamp::date                              AS interaction_date,
-    interval_30min                                   AS interval_30min,
-    COUNT(*)                                         AS ivr_interaction_count,
-    SUM(is_contained)                                AS contained_count,
-    SUM(is_transferred)                              AS transferred_count,
-    SUM(ivr_duration_seconds)                        AS total_ivr_duration,
-    SUM(CASE WHEN is_contained = 1 
-             THEN ivr_duration_seconds END)          AS contained_duration,
-    SUM(CASE WHEN is_contained = 0 
-             THEN ivr_duration_seconds END)          AS uncontained_duration,
-    'Snowflake'                                      AS data_source
-FROM analytics.fact_ivr_journey
-WHERE ivr_timestamp::date >= DATE '2024-01-01'
-  AND interval_30min <> 'N/A'
+    event_ts::date                                           AS event_date,
+    interval_30min                                            AS interval_30min,
+    COUNT(*)                                                  AS event_count,
+    SUM(CASE WHEN resolved_flag = 1 THEN 1 ELSE 0 END)        AS resolved_count,
+    SUM(CASE WHEN escalated_flag = 1 THEN 1 ELSE 0 END)       AS escalated_count,
+    SUM(duration_seconds)                                     AS total_duration_seconds,
+    SUM(CASE WHEN resolved_flag = 1 THEN duration_seconds END)     AS resolved_duration_seconds,
+    SUM(CASE WHEN resolved_flag = 0 THEN duration_seconds END)     AS unresolved_duration_seconds,
+    'example'                                                 AS data_source
+FROM analytics.fact_self_service_events e
+CROSS JOIN parameters p
+WHERE e.event_ts::date >= p.start_date
+  AND interval_30min IS NOT NULL
 GROUP BY
-    ivr_timestamp::date,
+    event_ts::date,
     interval_30min
 ORDER BY
-    interaction_date DESC,
+    event_date DESC,
     interval_30min;
