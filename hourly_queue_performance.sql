@@ -4,106 +4,57 @@
 --   using parameterized filters and excluded queues.
 
 WITH parameters AS (
-    SELECT 
-        TO_DATE('2024-01-01') AS start_date,
-        'inbound'             AS direction_filter
+  SELECT
+    TO_DATE('2024-01-01') AS start_date,
+    'inbound'             AS direction_filter,
+    30                    AS quick_abandon_threshold_seconds
 ),
-
 excluded_queues AS (
-    SELECT COLUMN1 AS queue_name
-    FROM VALUES
-        ('Queue A'),
-        ('Queue B'),
-        ('Queue C')
+  SELECT COLUMN1 AS queue_name
+  FROM VALUES ('Example Queue A'), ('Example Queue B')
 ),
-
-transfers AS (
-    SELECT
-        fa.interaction_timestamp::date                                 AS interaction_date,
-        fa.queue_name                                                  AS queue_name,
-        EXTRACT(HOUR FROM TO_TIMESTAMP(fa.interaction_start_ts))       AS interaction_hour,
-        SUM(fa.blind_transfer_count)                                   AS blind_transfer_count,
-        SUM(fa.consult_transfer_count)                                 AS consult_transfer_count
-    FROM analytics.fact_agent_interactions fa
-    CROSS JOIN parameters p
-    LEFT JOIN excluded_queues eq
-        ON fa.queue_name = eq.queue_name
-    WHERE
-        fa.direction = p.direction_filter
-        AND fa.agent_name IS NOT NULL
-        AND eq.queue_name IS NULL
-        AND fa.interaction_timestamp::date >= p.start_date
-    GROUP BY 
-        fa.interaction_timestamp::date,
-        fa.queue_name,
-        EXTRACT(HOUR FROM TO_TIMESTAMP(fa.interaction_start_ts))
+sla_config AS (
+  SELECT * FROM VALUES
+    ('Tier_1', 90),
+    ('Tier_2', 30)
+  AS t(queue_tier, sla_seconds)
 ),
-
-acd_interactions AS (
-    SELECT
-        fi.interaction_timestamp::date                                 AS interaction_date,
-        fi.queue_name                                                  AS queue_name,
-        EXTRACT(HOUR FROM TO_TIMESTAMP(fi.interaction_start_ts))       AS interaction_hour,
-        COUNT(*)                                                       AS row_count,
-        COUNT(*)                                                       AS conversation_count,
-        SUM(CASE WHEN fi.talk_seconds = 0 THEN 0 ELSE 1 END)          AS interactions_answered,
-        SUM(
-            CASE 
-                WHEN fi.talk_seconds > 0 
-                     AND (
-                         (fi.queue_name = 'Primary Service Queue'      AND fi.wait_seconds < 90)
-                         OR
-                         (fi.queue_name <> 'Primary Service Queue'     AND fi.wait_seconds < 30)
-                     )
-                THEN 1 ELSE 0
-            END
-        )                                                              AS interactions_answered_within_sl,
-        SUM(CASE WHEN fi.talk_seconds = 0 THEN 1 ELSE 0 END)          AS abandoned_interactions,
-        SUM(CASE WHEN fi.abandon_seconds BETWEEN 1 AND 30 
-                 THEN 1 ELSE 0 END)                                   AS quick_abandons,
-        SUM(fi.talk_seconds)                                          AS total_talk_seconds,
-        SUM(fi.hold_seconds)                                          AS total_hold_seconds,
-        SUM(fi.wait_seconds)                                          AS total_wait_seconds,
-        SUM(fi.abandon_seconds)                                       AS total_abandon_seconds,
-        SUM(fi.flow_out_count)                                        AS flow_out_interactions
-    FROM analytics.fact_acd_interactions fi
-    CROSS JOIN parameters p
-    LEFT JOIN excluded_queues eq
-        ON fi.queue_name = eq.queue_name
-    WHERE
-        fi.direction = p.direction_filter
-        AND eq.queue_name IS NULL
-        AND fi.interaction_timestamp::date >= p.start_date
-    GROUP BY 
-        fi.interaction_timestamp::date,
-        fi.queue_name,
-        EXTRACT(HOUR FROM TO_TIMESTAMP(fi.interaction_start_ts))
+queue_dim AS (
+  SELECT * FROM VALUES
+    ('Example Queue 1', 'Tier_1'),
+    ('Example Queue 2', 'Tier_2')
+  AS t(queue_name, queue_tier)
+),
+queue_events AS (
+  SELECT
+    e.event_ts::date AS event_date,
+    e.queue_name,
+    EXTRACT(HOUR FROM e.event_start_ts) AS event_hour,
+    e.talk_seconds,
+    e.wait_seconds,
+    e.abandon_seconds,
+    e.hold_seconds
+  FROM analytics.fact_queue_events e
+  CROSS JOIN parameters p
+  LEFT JOIN excluded_queues x ON e.queue_name = x.queue_name
+  WHERE e.direction = p.direction_filter
+    AND x.queue_name IS NULL
+    AND e.event_ts::date >= p.start_date
 )
-
 SELECT
-    ac.interaction_date,
-    ac.queue_name,
-    ac.interaction_hour,
-    ac.row_count,
-    ac.conversation_count,
-    ac.interactions_answered,
-    ac.interactions_answered_within_sl,
-    ac.abandoned_interactions,
-    ac.quick_abandons,
-    ac.total_talk_seconds,
-    ac.total_hold_seconds,
-    ac.total_wait_seconds,
-    ac.total_abandon_seconds,
-    ac.flow_out_interactions,
-    COALESCE(t.consult_transfer_count, 0) AS consult_transfer_count,
-    COALESCE(t.blind_transfer_count, 0)   AS blind_transfer_count,
-    'Snowflake'                           AS data_source
-FROM acd_interactions ac
-LEFT JOIN transfers t
-    ON  ac.interaction_date = t.interaction_date
-    AND ac.queue_name       = t.queue_name
-    AND ac.interaction_hour = t.interaction_hour
-ORDER BY 
-    ac.interaction_date DESC,
-    ac.queue_name       ASC,
-    ac.interaction_hour ASC;
+  q.event_date,
+  q.queue_name,
+  q.event_hour,
+  COUNT(*) AS conversation_count,
+  SUM(CASE WHEN q.talk_seconds > 0 THEN 1 ELSE 0 END) AS answered_count,
+  SUM(CASE WHEN q.talk_seconds > 0 AND q.wait_seconds < sc.sla_seconds THEN 1 ELSE 0 END)
+    AS answered_within_sla_count,
+  SUM(CASE WHEN q.talk_seconds = 0 THEN 1 ELSE 0 END) AS abandoned_count,
+  SUM(CASE WHEN q.abandon_seconds BETWEEN 1 AND p.quick_abandon_threshold_seconds THEN 1 ELSE 0 END)
+    AS quick_abandon_count
+FROM queue_events q
+JOIN queue_dim d  ON q.queue_name = d.queue_name
+JOIN sla_config sc ON d.queue_tier = sc.queue_tier
+CROSS JOIN parameters p
+GROUP BY 1,2,3
+ORDER BY 1 DESC, 2, 3;
