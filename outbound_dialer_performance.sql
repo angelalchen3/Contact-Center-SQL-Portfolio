@@ -1,105 +1,81 @@
+-- campaign_event_summary.sql
 -- Purpose:
---   Summarize outbound dialer activity, dials, connections, and agent time metrics
---   grouped by date and a randomized account bucket.
--- Notes:
---   - Original business outcomes consolidated into generic call result categories.
+--   Summarize campaign event volume, successful outcomes, and time-based metrics
+--   grouped by date and a hashed entity bucket (clean-room portfolio example).
 
-WITH dialer_load AS (
-    SELECT
-        CAST(load_timestamp AS DATE) AS load_date,
-        SUM(record_count)            AS dialer_load_count
-    FROM analytics.fact_dialer_load
-    WHERE load_timestamp >= DATE '2024-08-01'
-    GROUP BY CAST(load_timestamp AS DATE)
+WITH parameters AS (
+  SELECT
+    TO_DATE('2024-08-01') AS start_date,
+    100                   AS bucket_count
 ),
 
-base_calls AS (
-    SELECT
-        CAST(c.call_end_timestamp AS DATE)          AS call_date,
-        c.account_id                                 AS account_id,
-        c.call_result                                AS call_result,
-        c.agent_username                             AS agent_username,
-        c.call_category                               AS call_category,
-        c.call_sequence_number                        AS call_sequence_number,
-        c.supervisor_id                               AS supervisor_id,
-        c.call_end_timestamp                          AS call_end_time,
-        c.agent_work_seconds                          AS agent_work_seconds,
-        c.talk_seconds                                AS talk_seconds,
-        c.wait_seconds                                AS wait_seconds,
-        c.hold_seconds                                AS hold_seconds,
-        c.wrap_seconds                                AS wrap_seconds,
-        c.pause_seconds                               AS pause_seconds,
-        c.linkback_seconds                            AS linkback_seconds,
-        c.queue_wait_seconds                          AS queue_wait_seconds,
-        c.agent_first_name || ' ' || c.agent_last_name AS agent_name,
-        c.agent_team                                  AS agent_team,
-        c.agent_location                              AS agent_location,
-        c.call_flag                                   AS call_flag,
-        a.random_bucket                               AS random_bucket
-    FROM analytics.fact_outbound_calls c
-    JOIN analytics.dim_account a
-        ON c.account_id = a.account_id
-    WHERE c.call_end_timestamp >= DATE '2024-08-01'
-      AND a.is_deduped = 1
-      AND a.is_daily_feed = 0
+load_events AS (
+  SELECT
+    CAST(load_ts AS DATE) AS load_date,
+    SUM(records_loaded)   AS records_loaded
+  FROM analytics.fact_load_events
+  WHERE load_ts >= (SELECT start_date FROM parameters)
+  GROUP BY 1
 ),
 
-dials AS (
-    SELECT
-        b.call_date,
-        b.random_bucket,
-        COUNT(*)                        AS dial_count,
-        COUNT(DISTINCT b.account_id)    AS unique_accounts_dialed,
-        AVG(dl.dialer_load_count)       AS dialer_load_avg
-    FROM base_calls b
-    LEFT JOIN dialer_load dl
-        ON dl.load_date = b.call_date
-    WHERE 
-        -- Generic dialer outcomes used for portfolio safety
-        b.call_result ILIKE 'Answered%'
-        OR b.call_result IN (
-            'Busy',
-            'Invalid',
-            'No Answer',
-            'System Error'
-        )
-        OR b.call_result ILIKE 'Machine%'
-    GROUP BY 
-        b.call_date,
-        b.random_bucket
+base_events AS (
+  SELECT
+    CAST(e.event_end_ts AS DATE)                              AS event_date,
+    e.entity_id                                               AS entity_id,
+    e.event_outcome                                           AS event_outcome,
+    e.event_type                                              AS event_type,
+    e.event_end_ts                                            AS event_end_ts,
+    e.metric_work_seconds                                     AS work_seconds,
+    e.metric_active_seconds                                   AS active_seconds,
+    e.metric_wait_seconds                                     AS wait_seconds,
+    e.metric_hold_seconds                                     AS hold_seconds,
+    e.metric_wrap_seconds                                     AS wrap_seconds,
+    MOD(ABS(HASH(e.entity_id)), (SELECT bucket_count FROM parameters)) AS entity_bucket
+  FROM analytics.fact_campaign_events e
+  WHERE e.event_end_ts >= (SELECT start_date FROM parameters)
 ),
 
-connects AS (
-    SELECT
-        b.call_date,
-        b.random_bucket,
-        COUNT(*)                                                AS connect_count,
-        SUM(CASE WHEN b.call_category ILIKE '%Payment%' THEN 1 ELSE 0 END) AS payment_count,
-        SUM(b.talk_seconds)                                     AS total_talk_seconds,
-        SUM(b.hold_seconds)                                     AS total_hold_seconds,
-        SUM(b.wrap_seconds)                                     AS total_wrap_seconds
-    FROM base_calls b
-    WHERE b.call_result = 'Answered - Connected'
-    GROUP BY 
-        b.call_date,
-        b.random_bucket
+attempts AS (
+  SELECT
+    b.event_date,
+    b.entity_bucket,
+    COUNT(*)                     AS attempt_count,
+    COUNT(DISTINCT b.entity_id)  AS unique_entities_attempted,
+    AVG(le.records_loaded)       AS avg_records_loaded
+  FROM base_events b
+  LEFT JOIN load_events le
+    ON le.load_date = b.event_date
+  WHERE b.event_outcome IN ('SUCCESS', 'FAILURE', 'NO_RESPONSE', 'SYSTEM')
+  GROUP BY 1,2
+),
+
+successes AS (
+  SELECT
+    b.event_date,
+    b.entity_bucket,
+    COUNT(*)                                              AS success_count,
+    SUM(CASE WHEN b.event_type = 'TARGET_ACTION' THEN 1 ELSE 0 END) AS target_action_count,
+    SUM(b.active_seconds)                                 AS total_active_seconds,
+    SUM(b.hold_seconds)                                   AS total_hold_seconds,
+    SUM(b.wrap_seconds)                                   AS total_wrap_seconds
+  FROM base_events b
+  WHERE b.event_outcome = 'SUCCESS'
+  GROUP BY 1,2
 )
 
 SELECT
-    d.call_date                            AS call_date,
-    d.random_bucket                        AS random_bucket,
-    d.dial_count                           AS dial_count,
-    d.unique_accounts_dialed               AS unique_accounts_dialed,
-    d.dialer_load_avg                      AS dialer_load_avg,
-    COALESCE(c.connect_count, 0)           AS connect_count,
-    COALESCE(c.payment_count, 0)           AS payment_count,
-    c.total_talk_seconds,
-    c.total_hold_seconds,
-    c.total_wrap_seconds
-FROM dials d
-LEFT JOIN connects c
-    ON c.call_date = d.call_date
-   AND c.random_bucket = d.random_bucket
-ORDER BY 
-    d.call_date DESC,
-    random_bucket ASC;
+  a.event_date,
+  a.entity_bucket,
+  a.attempt_count,
+  a.unique_entities_attempted,
+  a.avg_records_loaded,
+  COALESCE(s.success_count, 0)         AS success_count,
+  COALESCE(s.target_action_count, 0)   AS target_action_count,
+  s.total_active_seconds,
+  s.total_hold_seconds,
+  s.total_wrap_seconds
+FROM attempts a
+LEFT JOIN successes s
+  ON s.event_date = a.event_date
+ AND s.entity_bucket = a.entity_bucket
+ORDER BY a.event_date DESC, a.entity_bucket ASC;
