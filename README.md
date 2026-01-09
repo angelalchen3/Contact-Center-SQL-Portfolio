@@ -11,9 +11,8 @@ This repository is meant to:
 
 ## Background
 
-This repository contains anonymized SQL examples based on real analytics and data engineering work.  
-The queries demonstrate skills in data modeling, time-series analysis, compliance logic, IVR analytics, 
-dialer performance measurement, and Snowflake SQL optimization.
+This repository contains original, portfolio-build SQL that demonstrates common contact center analytics patterns using synthetic schemas.
+The queries demonstrate skills in data modeling, time-series analysis, compliance logic, and Snowflake SQL optimization.
 
 All scripts are fully redacted and use synthetic or generic naming conventions.  
 The focus is on the underlying logic, not proprietary data.
