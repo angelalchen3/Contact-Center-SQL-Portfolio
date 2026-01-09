@@ -1,13 +1,12 @@
 -- hourly_queue_performance.sql
 -- Purpose:
---   Aggregate hourly queue performance metrics and transfer activity
---   using parameterized filters and excluded queues.
+--   Illustrative example: hourly queue performance metrics (synthetic schema + example thresholds only)
 
 WITH parameters AS (
   SELECT
-    TO_DATE('2024-01-01') AS start_date,
-    'inbound'             AS direction_filter,
-    30                    AS quick_abandon_threshold_seconds
+    DATEADD('day', -90, CURRENT_DATE()) AS start_date,  -- example lookback window
+    'inbound'                           AS direction_filter,
+    30                                  AS quick_abandon_threshold_seconds  -- example only
 ),
 excluded_queues AS (
   SELECT COLUMN1 AS queue_name
@@ -15,8 +14,8 @@ excluded_queues AS (
 ),
 sla_config AS (
   SELECT * FROM VALUES
-    ('Tier_1', 90),
-    ('Tier_2', 30)
+    ('Tier_1', 90),   -- example only
+    ('Tier_2', 30)    -- example only
   AS t(queue_tier, sla_seconds)
 ),
 queue_dim AS (
@@ -34,7 +33,7 @@ queue_events AS (
     e.wait_seconds,
     e.abandon_seconds,
     e.hold_seconds
-  FROM analytics.fact_queue_events e
+  FROM portfolio.fact_queue_events e
   CROSS JOIN parameters p
   LEFT JOIN excluded_queues x ON e.queue_name = x.queue_name
   WHERE e.direction = p.direction_filter
