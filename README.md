@@ -4,7 +4,7 @@
 
 This repository is meant to:
 - Demonstrate SQL proficiency for data engineering and analytics roles  
-- Provide examples of production-level logic without exposing sensitive or proprietary information  
+- Provide examples of representative analytics patterns used in production environments without exposing sensitive or proprietary information  
 - Show familiarity with contact center and outbound-dialer data models  
 
 ---
@@ -12,7 +12,7 @@ This repository is meant to:
 ## Background
 
 This repository contains original, portfolio-build SQL that demonstrates common contact center analytics patterns using synthetic schemas.
-The queries demonstrate skills in data modeling, time-series analysis, compliance logic, and Snowflake SQL optimization.
+The queries demonstrate skills in data modeling, time-series analysis, and Snowflake SQL optimization.
 
 All schemas, data, values, thresholds, and naming conventions have been recreated using synthetic structures and do not reflect any employer systems or proprietary logic.
 The focus is on the underlying logic, not proprietary data.
