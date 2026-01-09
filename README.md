@@ -14,7 +14,7 @@ This repository is meant to:
 This repository contains original, portfolio-build SQL that demonstrates common contact center analytics patterns using synthetic schemas.
 The queries demonstrate skills in data modeling, time-series analysis, compliance logic, and Snowflake SQL optimization.
 
-All scripts are fully redacted and use synthetic or generic naming conventions.  
+All schemas, data, values, thresholds, and naming conventions have been recreated using synthetic structures and do not reflect any employer systems or proprietary logic.
 The focus is on the underlying logic, not proprietary data.
 
 ---
